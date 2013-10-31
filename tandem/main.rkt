@@ -12,7 +12,8 @@
          tandem-send
          tandem-wait
          tandem-call
-         tandem-listen)
+         tandem-listen
+         tandem-communicate)
 
 
 ;; Private communication data.
@@ -149,6 +150,23 @@
         (let loop ()
           (handler-proc (poll-tandem-or-channel tandem tag channel))
           (loop)))
+
+      (thunk
+        ;; Make sure we unregister the receive channel.
+        (unregister-receive-channel tandem tag)))))
+
+
+;; Runs handler-proc with a callback for sending tagged values and a callback
+;; for receiving them in order for it to perform a multi-step communication.
+(define/contract (tandem-communicate tandem tag handler-proc)
+                 (-> tandem? any/c (-> (-> any/c void?) (-> any/c) any/c) any/c)
+  (let ((channel (register-receive-channel tandem tag)))
+    (dynamic-wind void
+      (thunk
+        (handler-proc (lambda (value)
+                        (tandem-send tandem tag value))
+                      (lambda ()
+                        (poll-tandem-or-channel tandem tag channel))))
 
       (thunk
         ;; Make sure we unregister the receive channel.

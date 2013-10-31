@@ -98,5 +98,25 @@ functions - one that transmits a tagged message and one that receives it.
   ]
 }
 
+@defproc[(tandem-communicate (tandem tandem?)
+                             (tag any/c)
+                             (handler-proc (-> (-> any/c void?)
+                                               (-> any/c)
+                                               any/c)))
+         any/c]{
+ Run @racket[handler-proc] with one callback for sending tagged values and
+ another one for receiving them in order for it to perform a multi-step
+ communication.
+
+ @examples[#:eval tandem-eval
+    (tandem-communicate echo-server 'tag
+                        (lambda (transmit receive)
+                          (transmit "Hello!")
+                          (let ((first-reply (receive)))
+                            (transmit "Thank you!")
+                            (list first-reply (receive)))))
+  ]
+}
+
 
 @; vim:set ft=scribble sw=2 ts=2 et:
