@@ -98,20 +98,6 @@
            (loop)))))))
 
 
-;; Prepare to receive the result, perform call and return the result.
-(define (call-and-wait tandem tag send-proc)
-  (let ((channel (register-receive-channel tandem tag)))
-    (send-proc)
-    (dynamic-wind void
-      (thunk
-        ;; Get a received value.
-        (poll-tandem-or-channel tandem tag channel))
-
-      (thunk
-        ;; Make sure we unregister the receive channel.
-        (unregister-receive-channel tandem tag)))))
-
-
 ;; Read result either directly or from the channel.
 (define (poll-tandem-or-channel tandem tag channel)
   (let ((sync-result (sync channel (tandem-receive-sema tandem))))
@@ -130,30 +116,25 @@
 ;; Wait for tagged value to arrive.
 (define/contract (tandem-wait tandem tag)
                  (-> tandem? any/c any/c)
-  (call-and-wait tandem tag void))
+  (tandem-communicate tandem tag (lambda (transmit receive)
+                                   (receive))))
 
 
 ;; Send tagged value and wait for a reply with the same tag to arrive.
 (define/contract (tandem-call tandem tag value)
                  (-> tandem? any/c any/c any/c)
-  (call-and-wait tandem tag (thunk (tandem-send tandem tag value))))
+  (tandem-communicate tandem tag (lambda (transmit receive)
+                                   (transmit value)
+                                   (receive))))
 
 
 ;; Indefinitely listen for tagged values to arrive.
 ;; As they arrive, the values are passed to the handler procedure.
 (define/contract (tandem-listen tandem tag handler-proc)
                  (-> tandem? any/c (-> any/c void?) void?)
-  (let ((channel (register-receive-channel tandem tag)))
-    (dynamic-wind void
-      (thunk
-        ;; Start calling handler for every received value.
-        (let loop ()
-          (handler-proc (poll-tandem-or-channel tandem tag channel))
-          (loop)))
-
-      (thunk
-        ;; Make sure we unregister the receive channel.
-        (unregister-receive-channel tandem tag)))))
+  (tandem-communicate tandem tag (lambda (transmit receive)
+                                   (for ((value (in-producer receive)))
+                                     (handler-proc value)))))
 
 
 ;; Runs handler-proc with a callback for sending tagged values and a callback

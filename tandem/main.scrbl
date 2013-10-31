@@ -66,7 +66,7 @@ functions - one that transmits a tagged message and one that receives it.
 @defproc[(tandem-wait (tandem tandem?) (tag any/c)) any/c]{
   Wait for a single value with specified tag.
 
-  Since we are using an asynchronous queue and nobody else does try to
+  Since we are using an asynchronous queue and nobody else tries to
   outrun us, we can retrieve the value from @racket[tandem-send] above.
 
   @examples[#:eval tandem-eval
