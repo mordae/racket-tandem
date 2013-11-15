@@ -5,7 +5,7 @@
 
 (require racket/contract
          racket/function
-         unstable/error)
+         throw)
 
 (provide (rename-out (new-tandem tandem))
          tandem?
@@ -60,8 +60,8 @@
     (with-semaphore (tandem-waiting-sema tandem)
       ;; We must not override another waiter, it would block indefinitely.
       (when (hash-has-key? waiting tag)
-        (error* 'register-receive-channel
-                "someone is already waiting for that tag" "tag" tag))
+        (throw exn:fail 'register-receive-channel
+               "someone is already waiting for that tag" "tag" tag))
 
       ;; Pass the boxed value through the channel back to this thread.
       (hash-set! waiting tag (lambda (value)
