@@ -133,8 +133,8 @@
 (define/contract (tandem-listen tandem tag handler-proc)
                  (-> tandem? any/c (-> any/c void?) void?)
   (tandem-communicate tandem tag (lambda (transmit receive)
-                                   (for ((value (in-producer receive)))
-                                     (handler-proc value)))))
+                                   (do () (#f)
+                                     (handler-proc (receive))))))
 
 
 ;; Runs handler-proc with a callback for sending tagged values and a callback
