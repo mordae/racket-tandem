@@ -4,8 +4,9 @@
 ;
 
 (require racket/contract
-         racket/function
-         throw)
+         racket/function)
+
+(require misc1/throw)
 
 (provide (rename-out (new-tandem tandem))
          tandem?
