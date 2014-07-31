@@ -2,36 +2,45 @@
 
 @require[(for-label tandem)
          (for-label racket)
-         (for-label racket/async-channel)]
+         (for-label misc1/fast-channel)]
 
 @require[scribble/eval]
 
 @(define tandem-eval (make-base-eval))
-@interaction-eval[#:eval tandem-eval (require racket/async-channel tandem)]
+@interaction-eval[#:eval tandem-eval (require misc1/fast-channel tandem)]
 
 @title{Tandem}
-@author+email["Jan Dvorak" "mordae@anilinux.org"]
+@author+email["Jan Dvořák" "mordae@anilinux.org"]
 
-Cooperative Communication Framework for Racket.
+Cooperative Communication Framework
 
 When communicating with a remote party, one often needs to run multiple
 parallel queries from different threads while monitoring the communication
-for asynchronous notifications.  The simple way to implement this pattern is
+for asynchronous notifications. The simple way to implement this pattern is
 to spawn a dedicated background thread that takes care of the communication
 and acts as a request-response server for other local threads.
 
-Tandem realizes this pattern using cpu time of threads doing the calls or
-listening for replies, thus eliminating the background thread.
+Tandem realizes this pattern using events and channels within the threads
+participating in the communication, thus eliminating the background thread.
 
 
 @defmodule[tandem]
 
-Tandem works as a middleware of sorts.  You need to supply two backend
-functions - one that transmits a tagged message and one that receives it.
+Tandem works as a middleware of sorts. You need to supply a backend event
+that produces tagged messages from the remote party and a procedure that
+sends our tagged messages.
 
-@defproc[(tandem (transmit-proc (-> any/c any/c void?))
-                 (receive-proc (-> (values any/c any/c)))) tandem?]{
+@defproc[(tandem (receive-any-evt (evt/c any/c any/c))
+                 (transmit (-> any/c any/c void?)))
+         tandem?]{
   Create structure that tracks state of the cooperative work.
+
+  The first argument of the @racket[transmit] procedure is a message tag,
+  that uniquely represents a call/return pair or non-uniquely identifies
+  an out-of-band notification. The other argument is the payload.
+
+  The same scheme applies to @racket[receive-any-evt]: it's first result
+  value represents a tag and the second the payload.
 
   As an example, we create a simple FIFO echo server that does not really
   communicate with anything external, but imagine that we used a TCP socket
@@ -39,11 +48,10 @@ functions - one that transmits a tagged message and one that receives it.
 
   @examples[#:eval tandem-eval
     (define echo-server
-      (let ((echoes (make-async-channel)))
-        (tandem (lambda (msg-tag msg-value)
-                  (async-channel-put echoes (list msg-tag msg-value)))
-                (lambda ()
-                  (apply values (async-channel-get echoes))))))
+      (let ((echoes (make-fast-channel)))
+        (tandem echoes
+                (λ (tag value)
+                  (fast-channel-put echoes tag value)))))
   ]
 }
 
@@ -55,66 +63,37 @@ functions - one that transmits a tagged message and one that receives it.
   ]
 }
 
-@defproc[(tandem-send (tandem tandem?) (tag any/c) (value any/c)) void?]{
-  Send a message you don't expect a reply to.
+@defproc[(tandem-transmit (tandem tandem?) (tag any/c) (value any/c)) void?]{
+  Send a tagged message to the other party.
 
   @examples[#:eval tandem-eval
-    (tandem-send echo-server 'a-tag "something")
+    (tandem-transmit echo-server 'a-tag "something")
   ]
 }
 
-@defproc[(tandem-wait (tandem tandem?) (tag any/c)) any/c]{
-  Wait for a single value with specified tag.
+@defproc[(tandem-receive-evt (tandem tandem?) (tag any/c)) (evt/c any/c)]{
+  An event that can be used to wait for a tagged value to arrive.
+
+  Please note that creating such event registers a new channel that
+  gets removed only after a garbage collection cycle. Thus creating
+  many such events in a tight loop will be incredibly inefficient.
 
   Since we are using an asynchronous queue and nobody else tries to
-  outrun us, we can retrieve the value from @racket[tandem-send] above.
+  outrun us, we can retrieve the value from @racket[tandem-transmit] above.
 
   @examples[#:eval tandem-eval
-    (tandem-wait echo-server 'a-tag)
+    (sync (tandem-receive-evt echo-server 'a-tag))
   ]
 }
 
-@defproc[(tandem-call (tandem tandem?) (tag any/c) (value any/c)) any/c]{
+@defproc[(tandem-call-evt (tandem tandem?) (tag any/c) (value any/c))
+         (evt/c any/c)]{
   Perform a full remote call by sending specified tagged value and
-  waiting for a reply with the same tag.
+  create an event that waits for a reply with the same tag.
 
   @examples[#:eval tandem-eval
-    (tandem-call echo-server 'hello "Hello World!")
-    (tandem-call echo-server 'bye "It's time to wrap this up.")
-  ]
-}
-
-@defproc[(tandem-listen (tandem tandem?)
-                        (tag any/c)
-                        (handle-proc (-> any/c void?))) void?]{
-  Wait indefinitely for all values matching given tag and apply the handler
-  procedure to them.  The only way to escape is to raise an exception.
-
-  @examples[#:eval tandem-eval
-    (tandem-send echo-server 'something "nice")
-    (tandem-listen echo-server 'something
-      (lambda (value)
-        (error 'something-handler "received ~s\n" value)))
-  ]
-}
-
-@defproc[(tandem-communicate (tandem tandem?)
-                             (tag any/c)
-                             (handler-proc (-> (-> any/c void?)
-                                               (-> any/c)
-                                               any/c)))
-         any/c]{
- Run @racket[handler-proc] with one callback for sending tagged values and
- another one for receiving them in order for it to perform a multi-step
- communication.
-
- @examples[#:eval tandem-eval
-    (tandem-communicate echo-server 'tag
-                        (lambda (transmit receive)
-                          (transmit "Hello!")
-                          (let ((first-reply (receive)))
-                            (transmit "Thank you!")
-                            (list first-reply (receive)))))
+    (sync (tandem-call-evt echo-server 'hello "Hello World!"))
+    (sync (tandem-call-evt echo-server 'bye "It's time to wrap this up."))
   ]
 }
 
