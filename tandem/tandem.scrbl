@@ -30,6 +30,11 @@ Tandem works as a middleware of sorts. You need to supply a backend event
 that produces tagged messages from the remote party and a procedure that
 sends our tagged messages.
 
+Note that even though tandem itself is thread-safe and in fact designed
+to be shared among multiple threads, it does not ensure that the actual
+transmitting and receiving code is called from one thread only. It's up
+to you to ensure that it will operate correctly under those conditions.
+
 @defproc[(tandem (receive-any-evt (evt/c any/c any/c))
                  (transmit (-> any/c any/c void?)))
          tandem?]{
