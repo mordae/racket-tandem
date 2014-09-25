@@ -35,7 +35,7 @@
   (let ((my-channel (make-fast-channel))
         (any-result (tandem-receive-any-evt tandem))
         (waiters (tandem-waiters tandem)))
-    (producing new-evt
+    (recursive (new-evt)
       (set-add! waiters my-channel)
       (replace-evt (choice-evt any-result my-channel)
                    (λ (r-tag r-value)
